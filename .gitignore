@@ -1,0 +1,16 @@
+# Secrets (DO NOT COMMIT)
+config/firestore_sa.json
+config/gemini_key.txt
+
+# Virtual env / Python junk
+.venv/
+__pycache__/
+*.pyc
+
+# IDE stuff
+.idea/
+.vscode/
+
+# Generated files
+pipeline_items.json
+cards/
