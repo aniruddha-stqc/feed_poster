@@ -22,3 +22,5 @@ Not committed to git:
 - `config/firestore_sa.json`
 
 Both must be created locally before running the scripts.
+
+Recommended runtime: Python 3.11+
