@@ -12,9 +12,32 @@ from card_generator import create_card
 from hashtags import build_hashtags
 
 
+import os
+import json
+from google.oauth2 import service_account
+from pathlib import Path
+from google.cloud import firestore
+
+
 def get_firestore_client():
-    # Requires GOOGLE_APPLICATION_CREDENTIALS to be set
-    return firestore.Client()
+    # Priority: ENV > local config file
+    sa_data = os.getenv("FIRESTORE_SA_JSON")
+
+    if sa_data:
+        info = json.loads(sa_data)
+        creds = service_account.Credentials.from_service_account_info(info)
+        return firestore.Client(credentials=creds, project=info["project_id"])
+
+    # Local dev fallback
+    base_dir = Path(__file__).parent
+    key_path = base_dir / "config" / "firestore_sa.json"
+
+    if not key_path.exists():
+        raise RuntimeError("Firestore credentials not found (env or file).")
+
+    creds = service_account.Credentials.from_service_account_file(str(key_path))
+    return firestore.Client(credentials=creds, project=creds.project_id)
+
 
 
 def process_one_doc(doc_ref, data: dict):

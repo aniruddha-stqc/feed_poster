@@ -1,6 +1,7 @@
 # gemini_summarizer.py
 import google.generativeai as genai
 from pathlib import Path
+import os
 
 
 # -------------------------
@@ -11,7 +12,12 @@ KEY_FILE = Path(__file__).parent / "config" / "gemini_key.txt"
 if not KEY_FILE.exists():
     raise RuntimeError(f"GEMINI API key file not found: {KEY_FILE}")
 
-API_KEY = KEY_FILE.read_text(encoding="utf-8").strip()
+
+API_KEY = os.getenv("GEMINI_API_KEY") or KEY_FILE.read_text(encoding="utf-8").strip()
+
+if not API_KEY:
+    raise RuntimeError("GEMINI API key not found (env var or file).")
+
 
 if not API_KEY:
     raise RuntimeError("GEMINI API key file is empty")
