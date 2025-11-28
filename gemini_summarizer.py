@@ -1,29 +1,27 @@
 # gemini_summarizer.py
-import google.generativeai as genai
-from pathlib import Path
 import os
-
+from pathlib import Path
+import google.generativeai as genai
 
 # -------------------------
-# LOAD API KEY FROM FILE
+# LOAD API KEY (ENV → FILE)
 # -------------------------
 KEY_FILE = Path(__file__).parent / "config" / "gemini_key.txt"
 
-if not KEY_FILE.exists():
-    raise RuntimeError(f"GEMINI API key file not found: {KEY_FILE}")
+# First try environment variable (for GitHub Actions / CI)
+API_KEY = os.getenv("GEMINI_API_KEY")
 
-
-API_KEY = os.getenv("GEMINI_API_KEY") or KEY_FILE.read_text(encoding="utf-8").strip()
-
-if not API_KEY:
-    raise RuntimeError("GEMINI API key not found (env var or file).")
-
+# Fallback: local file (for your laptop)
+if not API_KEY and KEY_FILE.exists():
+    API_KEY = KEY_FILE.read_text(encoding="utf-8").strip()
 
 if not API_KEY:
-    raise RuntimeError("GEMINI API key file is empty")
+    raise RuntimeError(
+        "GEMINI API key not found. Set GEMINI_API_KEY env var or create config/gemini_key.txt"
+    )
 
-# Configure Gemini
 genai.configure(api_key=API_KEY)
+
 
 
 # -------------------------
