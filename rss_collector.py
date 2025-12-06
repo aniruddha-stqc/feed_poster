@@ -5,7 +5,12 @@ import hashlib
 import json
 from pathlib import Path
 from datetime import datetime, timezone
-
+from newspaper_scrap import (
+    scrape_bartaman_binodon_with_articles,
+    scrape_dainik_statesman_binodan_with_articles,
+    BARTAMAN_CATEGORY_URL,
+    DS_CATEGORY_URL,
+)
 from google.cloud import firestore
 from google.oauth2 import service_account
 
@@ -85,13 +90,13 @@ def push_to_firestore(items):
 # Your existing RSS logic
 # -------------------------
 
-FEED_URLS = [
-    "https://bangla.hindustantimes.com/rss/entertainment",
-    "https://bengali.abplive.com/entertainment/feed",
-    "https://bengali.news18.com/commonfeeds/v1/ben/rss/entertainment/film-review.xml",
-    "https://bengali.news18.com/commonfeeds/v1/ben/rss/entertainment/tollywood-movies.xml",
-    "https://timesofindia.indiatimes.com/rssfeedsvideo/3812908.cms",
-]
+# FEED_URLS = [
+#     #"https://bangla.hindustantimes.com/rss/entertainment",
+#     "https://bengali.abplive.com/entertainment/feed",
+#     "https://bengali.news18.com/commonfeeds/v1/ben/rss/entertainment/film-review.xml",
+#     "https://bengali.news18.com/commonfeeds/v1/ben/rss/entertainment/tollywood-movies.xml",
+#     "https://timesofindia.indiatimes.com/rssfeedsvideo/3812908.cms",
+# ]
 
 OUTFILE = Path("pipeline_items.json")
 
@@ -124,36 +129,104 @@ def extract_media_url(entry):
             return url
     return None
 
-
-def collect_rss():
+def collect_scraped():
+    """
+    Use scraped Bartaman + Dainik Statesman instead of RSS.
+    Returns a list of dicts compatible with the old RSS pipeline.
+    """
     rows = []
-    for feed_url in FEED_URLS:
-        feed = feedparser.parse(feed_url)
-        source_name = get_source_name(feed, feed_url)
 
-        for entry in feed.entries:
-            title = (entry.get("title") or "").strip()
-            link = (entry.get("link") or "").strip()
-            media_url = extract_media_url(entry)
-            published = entry.get("published", entry.get("pubDate", ""))
+    # ---------- Bartaman ----------
+    try:
+        bartaman_items = scrape_bartaman_binodon_with_articles()
+    except Exception as e:
+        print(f"Error scraping Bartaman: {e}")
+        bartaman_items = []
 
-            row = {
-                "uid": make_uid(link, title),
-                "source": source_name,
-                "feed_url": feed_url,
-                "title": title,
-                "summary_raw": (entry.get("summary", entry.get("description", "")) or "").strip(),
-                "link": link,
-                "published": published,
-                "media_url": media_url or "",
-                "status": "NEW",  # local status, Firestore gets "raw"
-            }
-            rows.append(row)
+    for item in bartaman_items:
+        ad = item.get("article_details") or {}
+
+        title = (ad.get("article_title") or item.get("title") or "").strip()
+        link = (item.get("article_url") or "").strip()
+        summary = (ad.get("short_description") or "").strip()
+        media_url = (ad.get("article_image_url") or item.get("card_image_url") or "").strip()
+        published = (ad.get("date") or "").strip()
+
+        rows.append({
+            "uid": make_uid(link, title),
+            "source": "Bartaman Binodon",
+            "feed_url": BARTAMAN_CATEGORY_URL,
+            "title": title,
+            "summary_raw": summary,
+            "link": link,
+            "published": published,   # free-text date, pandas will try to parse
+            "media_url": media_url,
+            "status": "NEW",
+        })
+
+    # ---------- Dainik Statesman ----------
+    try:
+        ds_items = scrape_dainik_statesman_binodan_with_articles()
+    except Exception as e:
+        print(f"Error scraping Dainik Statesman: {e}")
+        ds_items = []
+
+    for item in ds_items:
+        ad = item.get("article_details") or {}
+
+        title = (ad.get("article_title") or item.get("title") or "").strip()
+        link = (item.get("article_url") or "").strip()
+        summary = (ad.get("short_description") or "").strip()
+        media_url = (ad.get("article_image_url") or item.get("card_image_url") or "").strip()
+        published = (ad.get("date") or "").strip()
+
+        rows.append({
+            "uid": make_uid(link, title),
+            "source": "Dainik Statesman Binodan",
+            "feed_url": DS_CATEGORY_URL,
+            "title": title,
+            "summary_raw": summary,
+            "link": link,
+            "published": published,
+            "media_url": media_url,
+            "status": "NEW",
+        })
+
     return rows
 
 
+
+# def collect_rss():
+#     rows = []
+#     for feed_url in FEED_URLS:
+#         feed = feedparser.parse(feed_url)
+#         source_name = get_source_name(feed, feed_url)
+#
+#         for entry in feed.entries:
+#             title = (entry.get("title") or "").strip()
+#             link = (entry.get("link") or "").strip()
+#             media_url = extract_media_url(entry)
+#             published = entry.get("published", entry.get("pubDate", ""))
+#
+#             row = {
+#                 "uid": make_uid(link, title),
+#                 "source": source_name,
+#                 "feed_url": feed_url,
+#                 "title": title,
+#                 "summary_raw": (entry.get("summary", entry.get("description", "")) or "").strip(),
+#                 "link": link,
+#                 "published": published,
+#                 "media_url": media_url or "",
+#                 "status": "NEW",  # local status, Firestore gets "raw"
+#             }
+#             rows.append(row)
+#     return rows
+
+
 def main():
-    rows = collect_rss()
+    #rows = collect_rss()
+    rows = collect_scraped()      # ✅ new scraped source
+
     df = pd.DataFrame(rows)
 
     # 1) Parse published → published_dt (Timestamp / NaT)

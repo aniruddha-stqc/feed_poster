@@ -1,23 +1,24 @@
 # processor.py
 from datetime import datetime, timezone
 
+import os
+import json
+from pathlib import Path
+
 from google.cloud import firestore
+from google.oauth2 import service_account
 
 from gemini_summarizer import (
     summarize_one_liner,
     telegram_caption,
     instagram_caption,
 )
-from card_generator import create_card
 from hashtags import build_hashtags
 
 
-import os
-import json
-from google.oauth2 import service_account
-from pathlib import Path
-from google.cloud import firestore
-
+# -------------------------
+# Firestore helpers
+# -------------------------
 
 def get_firestore_client():
     # Priority: ENV > local config file
@@ -39,6 +40,9 @@ def get_firestore_client():
     return firestore.Client(credentials=creds, project=creds.project_id)
 
 
+# -------------------------
+# Processing logic (TEXT-ONLY)
+# -------------------------
 
 def process_one_doc(doc_ref, data: dict):
     title = data.get("title", "") or ""
@@ -55,7 +59,7 @@ def process_one_doc(doc_ref, data: dict):
         mode = "gemini"
         gemini_error = None
     except Exception as e:
-        # You can plug your template_summarizer fallback here if you want
+        # Fallback
         one_line = title[:120]
         cap_tg = f"📰 {title}\n\n🔗 {url}"
         cap_ig = f"🎬 {title}\n\nSource: {source}"
@@ -69,25 +73,26 @@ def process_one_doc(doc_ref, data: dict):
     caption_telegram_full = cap_tg + ("\n\n" + tag_line if tag_line else "")
     caption_instagram_full = cap_ig + ("\n\n" + tag_line if tag_line else "")
 
-    # 3) Image card via Pillow
-    card_path = create_card(title=title, source=source, date_str=published_at)
-
-    # 4) Update Firestore
+    # 3) Update Firestore (NO IMAGES)
     update_data = {
         "summary": one_line,
         "caption_telegram": caption_telegram_full,
         "caption_instagram": caption_instagram_full,
         "hashtags": hashtags,
-        "image_card_path": card_path,
         "status": "ready",
         "processed_at": datetime.now(timezone.utc),
         "ai_mode": mode,
     }
+
     if gemini_error:
         update_data["gemini_error"] = gemini_error
 
     doc_ref.update(update_data)
 
+
+# -------------------------
+# Main runner
+# -------------------------
 
 def main():
     client = get_firestore_client()
@@ -95,7 +100,11 @@ def main():
 
     # Get items that are still raw
     docs = col.where("status", "==", "raw").stream()
-
+    # DEBUG: show total docs and first few
+    all_docs = list(col.stream())
+    print("Total docs in news_items:", len(all_docs))
+    for d in all_docs[:3]:
+        print("DOC ID:", d.id, "=>", d.to_dict())
     count = 0
     for doc in docs:
         data = doc.to_dict()
