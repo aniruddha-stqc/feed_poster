@@ -27,7 +27,7 @@ jobs:
       - name: Run RSS Collector
         env:
           FIRESTORE_SA_JSON: ${{ secrets.FIRESTORE_SA_JSON }}
-        run: python rss_collector.py
+        run: python news_collector.py
 
       - name: Run Gemini Processor
         env:
