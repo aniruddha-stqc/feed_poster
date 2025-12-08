@@ -1,28 +1,29 @@
-import feedparser
-import pandas as pd
-from urllib.parse import urlparse
-import hashlib
+# news_collector.py
+
+import os
 import json
+import hashlib
 from pathlib import Path
 from datetime import datetime, timezone
+from urllib.parse import urlparse
+
+import pandas as pd
+from google.oauth2 import service_account
+from google.cloud import firestore
+
 from newspaper_scrap import (
     scrape_bartaman_binodon_with_articles,
     scrape_dainik_statesman_binodan_with_articles,
+    scrape_eisamay_entertainment_with_articles,
+
     BARTAMAN_CATEGORY_URL,
     DS_CATEGORY_URL,
+    EISAMAY_ENT_CATEGORY_URL,
 )
-from google.cloud import firestore
-from google.oauth2 import service_account
 
 # -------------------------
 # Firestore helpers
 # -------------------------
-
-import os
-import json
-from google.oauth2 import service_account
-from pathlib import Path
-from google.cloud import firestore
 
 
 def get_firestore_client():
@@ -48,7 +49,7 @@ def get_firestore_client():
 def push_to_firestore(items):
     """
     Push items to Firestore collection 'news_items'.
-    Uses uid as document ID so duplicates are skipped.
+    Uses uid as document ID so duplicates (same uid) are skipped.
     """
     client = get_firestore_client()
     col = client.collection("news_items")
@@ -65,7 +66,6 @@ def push_to_firestore(items):
             skipped += 1
             continue
 
-        # Map fields to Firestore document structure
         data = {
             "uid": item["uid"],
             "title": item["title"],
@@ -76,7 +76,7 @@ def push_to_firestore(items):
             "media_url": item.get("media_url") or "",
             "published_raw": item["published"],
             "published_at": item.get("published_dt_str", ""),  # ISO string
-            "status": "raw",  # pipeline status (instead of "NEW")
+            "status": "raw",
             "created_at": datetime.now(timezone.utc),
         }
 
@@ -85,6 +85,10 @@ def push_to_firestore(items):
 
     print(f"\nFirestore push: added {added}, skipped {skipped} (already existed).")
 
+
+# -------------------------
+# Misc helpers
+# -------------------------
 
 OUTFILE = Path("pipeline_items.json")
 
@@ -102,24 +106,14 @@ def get_source_name(feed, feed_url):
     return netloc.replace("www.", "")
 
 
-def extract_media_url(entry):
-    if hasattr(entry, "media_content") and entry.media_content:
-        url = entry.media_content[0].get("url")
-        if url:
-            return url
-    if hasattr(entry, "media_thumbnail") and entry.media_thumbnail:
-        url = entry.media_thumbnail[0].get("url")
-        if url:
-            return url
-    if "enclosures" in entry and entry.enclosures:
-        url = entry.enclosures[0].get("href")
-        if url:
-            return url
-    return None
+# -------------------------
+# Scraped sources collector
+# -------------------------
+
 
 def collect_scraped():
     """
-    Use scraped Bartaman + Dainik Statesman instead of RSS.
+    Use scraped Bartaman + Dainik Statesman + Eisamay instead of RSS.
     Returns a list of dicts compatible with the old RSS pipeline.
     """
     rows = []
@@ -127,6 +121,7 @@ def collect_scraped():
     # ---------- Bartaman ----------
     try:
         bartaman_items = scrape_bartaman_binodon_with_articles()
+
     except Exception as e:
         print(f"Error scraping Bartaman: {e}")
         bartaman_items = []
@@ -147,9 +142,9 @@ def collect_scraped():
             "title": title,
             "summary_raw": summary,
             "link": link,
-            "published": published,   # free-text date, pandas will try to parse
+            "published": published,
             "media_url": media_url,
-            "status": "NEW",
+            "status": "raw",
         })
 
     # ---------- Dainik Statesman ----------
@@ -177,14 +172,47 @@ def collect_scraped():
             "link": link,
             "published": published,
             "media_url": media_url,
-            "status": "NEW",
+            "status": "raw",
+        })
+
+    # ---------- Eisamay Entertainment ----------
+    try:
+        es_items = scrape_eisamay_entertainment_with_articles()
+    except Exception as e:
+        print(f"Error scraping Eisamay: {e}")
+        es_items = []
+
+    for item in es_items:
+        ad = item.get("article_details") or {}
+
+        title = (ad.get("article_title") or item.get("title") or "").strip()
+        link = (item.get("article_url") or "").strip()
+        summary = (ad.get("short_description") or item.get("listing_subheadline") or "").strip()
+        media_url = (ad.get("article_image_url") or item.get("card_image_url") or "").strip()
+        published = (ad.get("date") or "").strip()
+
+        rows.append({
+            "uid": make_uid(link, title),
+            "source": "Eisamay Entertainment",
+            "feed_url": EISAMAY_ENT_CATEGORY_URL,
+            "title": title,
+            "summary_raw": summary,
+            "link": link,
+            "published": published,
+            "media_url": media_url,
+            "status": "raw",
         })
 
     return rows
 
+
+# -------------------------
+# Main
+# -------------------------
+
+
 def main():
-    #rows = collect_rss()
-    rows = collect_scraped()      # ✅ new scraped source
+    rows = collect_scraped()
 
     df = pd.DataFrame(rows)
 
@@ -202,10 +230,10 @@ def main():
     df["published_dt_str"] = df["published_dt"].dt.strftime("%Y-%m-%dT%H:%M:%S%z")
     df["published_dt_str"] = df["published_dt_str"].fillna("")
 
-    # 4) Drop the problematic Timestamp column completely (so JSON never sees it)
+    # 4) Drop the Timestamp column (so JSON never sees it)
     df = df.drop(columns=["published_dt"])
 
-    # 5) To dict – now all values are plain Python types (str, int, etc.)
+    # 5) To dict – now all values are plain Python types
     items = df.to_dict(orient="records")
 
     # 6) Save JSON (for debugging / local inspection)
@@ -213,8 +241,9 @@ def main():
         json.dumps(items, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-
     print(f"Saved {len(items)} items to {OUTFILE.resolve()}")
+
+    # Debug print a few headlines
     for i, item in enumerate(items[:3], start=1):
         print("=" * 80)
         print(f"[{i}] {item['source']}")

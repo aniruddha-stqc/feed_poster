@@ -1,5 +1,6 @@
 # processor.py
 from datetime import datetime, timezone
+from google.cloud.firestore_v1 import FieldFilter
 
 import os
 import json
@@ -13,7 +14,6 @@ from gemini_summarizer import (
     telegram_caption,
     instagram_caption,
 )
-from hashtags import build_hashtags
 
 
 # -------------------------
@@ -49,7 +49,6 @@ def process_one_doc(doc_ref, data: dict):
     raw_summary = data.get("raw_summary", "") or ""
     source = data.get("source", "") or ""
     url = data.get("url", "") or ""
-    published_at = (data.get("published_at") or "")[:10]
 
     # 1) Gemini text generation
     try:
@@ -66,19 +65,11 @@ def process_one_doc(doc_ref, data: dict):
         mode = "fallback"
         gemini_error = str(e)
 
-    # 2) Hashtags
-    hashtags = build_hashtags(data)
-    tag_line = " ".join(hashtags) if hashtags else ""
-
-    caption_telegram_full = cap_tg + ("\n\n" + tag_line if tag_line else "")
-    caption_instagram_full = cap_ig + ("\n\n" + tag_line if tag_line else "")
-
-    # 3) Update Firestore (NO IMAGES)
+    # 2) Firestore update (NO HASHTAGS)
     update_data = {
         "summary": one_line,
-        "caption_telegram": caption_telegram_full,
-        "caption_instagram": caption_instagram_full,
-        "hashtags": hashtags,
+        "caption_telegram": cap_tg,
+        "caption_instagram": cap_ig,
         "status": "ready",
         "processed_at": datetime.now(timezone.utc),
         "ai_mode": mode,
@@ -98,13 +89,10 @@ def main():
     client = get_firestore_client()
     col = client.collection("news_items")
 
-    # Get items that are still raw
-    docs = col.where("status", "==", "raw").stream()
-    # DEBUG: show total docs and first few
-    all_docs = list(col.stream())
-    print("Total docs in news_items:", len(all_docs))
-    for d in all_docs[:3]:
-        print("DOC ID:", d.id, "=>", d.to_dict())
+    # Get items that are still raw (new Firestore style)
+    docs = col.where(
+        filter=FieldFilter("status", "==", "raw")
+    ).stream()
     count = 0
     for doc in docs:
         data = doc.to_dict()
@@ -118,6 +106,7 @@ def main():
                 "processing_error": str(e),
                 "processed_at": datetime.now(timezone.utc),
             })
+
     print(f"Processed {count} items.")
 
 
