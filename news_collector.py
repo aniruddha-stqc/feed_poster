@@ -70,6 +70,7 @@ def push_to_firestore(items):
             "uid": item["uid"],
             "title": item["title"],
             "raw_summary": item["summary_raw"],
+            "full_text": item.get("full_text", ""),   # 👈 ADD THIS
             "url": item["link"],
             "source": item["source"],
             "feed_url": item["feed_url"],
@@ -79,6 +80,7 @@ def push_to_firestore(items):
             "status": "raw",
             "created_at": datetime.now(timezone.utc),
         }
+
 
         doc_ref.set(data)
         added += 1
@@ -134,18 +136,26 @@ def collect_scraped():
         summary = (ad.get("short_description") or "").strip()
         media_url = (ad.get("article_image_url") or item.get("card_image_url") or "").strip()
         published = (ad.get("date") or "").strip()
+        full_text = (ad.get("full_text") or "").strip()   # 👈 NEW
 
-        rows.append({
+        # keep all original scraped fields
+        row = dict(item)
+        # and override / add normalized fields
+        row.update({
             "uid": make_uid(link, title),
             "source": "Bartaman Binodon",
             "feed_url": BARTAMAN_CATEGORY_URL,
             "title": title,
             "summary_raw": summary,
+            "full_text": full_text,      # 👈 TOP-LEVEL FIELD
             "link": link,
             "published": published,
             "media_url": media_url,
             "status": "raw",
         })
+
+        rows.append(row)
+
 
     # ---------- Dainik Statesman ----------
     try:
@@ -162,18 +172,24 @@ def collect_scraped():
         summary = (ad.get("short_description") or "").strip()
         media_url = (ad.get("article_image_url") or item.get("card_image_url") or "").strip()
         published = (ad.get("date") or "").strip()
+        full_text = (ad.get("full_text") or "").strip()   # 👈 NEW
 
-        rows.append({
+        row = dict(item)
+        row.update({
             "uid": make_uid(link, title),
             "source": "Dainik Statesman Binodan",
             "feed_url": DS_CATEGORY_URL,
             "title": title,
             "summary_raw": summary,
+            "full_text": full_text,      # 👈 NEW
             "link": link,
             "published": published,
             "media_url": media_url,
             "status": "raw",
         })
+
+        rows.append(row)
+
 
     # ---------- Eisamay Entertainment ----------
     try:
@@ -190,18 +206,24 @@ def collect_scraped():
         summary = (ad.get("short_description") or item.get("listing_subheadline") or "").strip()
         media_url = (ad.get("article_image_url") or item.get("card_image_url") or "").strip()
         published = (ad.get("date") or "").strip()
+        full_text = (ad.get("full_text") or "").strip()   # 👈 NEW
 
-        rows.append({
+        row = dict(item)
+        row.update({
             "uid": make_uid(link, title),
             "source": "Eisamay Entertainment",
             "feed_url": EISAMAY_ENT_CATEGORY_URL,
             "title": title,
             "summary_raw": summary,
+            "full_text": full_text,      # 👈 NEW
             "link": link,
             "published": published,
             "media_url": media_url,
             "status": "raw",
         })
+
+        rows.append(row)
+
 
     return rows
 
