@@ -147,11 +147,7 @@ def scrape_bartaman_binodon_with_articles():
         print(f"[Bartaman {idx}/{len(cards)}] Fetching article: {url}")
         try:
             article_data = scrape_bartaman_article(url)
-            print("DEBUG BARTAMAN ARTICLE:")
-            print("  TITLE:", article_data.get("article_title"))
-            print("  SHORT:", article_data.get("short_description"))
-            print("  FULL :", article_data.get("full_text"))
-            print("--------")
+
 
         except Exception as e:
             print(f"  !! Error scraping Bartaman article {url}: {e}")
@@ -576,6 +572,7 @@ def scrape_eisamay_entertainment_with_articles():
         print(f"[Eisamay {idx}/{len(cards)}] Fetching article: {url}")
         try:
             article_data = scrape_eisamay_article(url)
+
         except Exception as e:
             print(f"  !! Error scraping Eisamay article {url}: {e}")
             article_data = None
@@ -604,7 +601,7 @@ if __name__ == "__main__":
             print("DATE:", det["date"])
             print("SHORT DESC:", det["short_description"])
             full = det["full_text"] or ""
-            print("FULL TEXT (first 200 chars):", full[:200], "..." if len(full) > 200 else "")
+            print("FULL TEXT :", full)
 
     print(">>> BARTAMAN BINODON")
     bartaman_data = scrape_bartaman_binodon_with_articles()
@@ -618,7 +615,7 @@ if __name__ == "__main__":
             print("DATE:", item["article_details"]["date"])
             print("SHORT DESC:", item["article_details"]["short_description"])
             full = item["article_details"]["full_text"] or ""
-            print("FULL TEXT (first 200 chars):", full[:200], "..." if len(full) > 200 else "")
+            print("FULL TEXT :", full)
 
     print("\n>>> DAINIK STATESMAN BINODAN")
     ds_data = scrape_dainik_statesman_binodan_with_articles()
@@ -632,5 +629,5 @@ if __name__ == "__main__":
             print("DATE:", item["article_details"]["date"])
             print("SHORT DESC:", item["article_details"]["short_description"])
             full = item["article_details"]["full_text"] or ""
-            print("FULL TEXT (first 200 chars):", full[:200], "..." if len(full) > 200 else "")
+            print("FULL TEXT :", full)
 
