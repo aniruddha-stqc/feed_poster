@@ -86,18 +86,6 @@ def push_to_firestore(items):
     print(f"\nFirestore push: added {added}, skipped {skipped} (already existed).")
 
 
-# -------------------------
-# Your existing RSS logic
-# -------------------------
-
-# FEED_URLS = [
-#     #"https://bangla.hindustantimes.com/rss/entertainment",
-#     "https://bengali.abplive.com/entertainment/feed",
-#     "https://bengali.news18.com/commonfeeds/v1/ben/rss/entertainment/film-review.xml",
-#     "https://bengali.news18.com/commonfeeds/v1/ben/rss/entertainment/tollywood-movies.xml",
-#     "https://timesofindia.indiatimes.com/rssfeedsvideo/3812908.cms",
-# ]
-
 OUTFILE = Path("pipeline_items.json")
 
 
@@ -193,35 +181,6 @@ def collect_scraped():
         })
 
     return rows
-
-
-
-# def collect_rss():
-#     rows = []
-#     for feed_url in FEED_URLS:
-#         feed = feedparser.parse(feed_url)
-#         source_name = get_source_name(feed, feed_url)
-#
-#         for entry in feed.entries:
-#             title = (entry.get("title") or "").strip()
-#             link = (entry.get("link") or "").strip()
-#             media_url = extract_media_url(entry)
-#             published = entry.get("published", entry.get("pubDate", ""))
-#
-#             row = {
-#                 "uid": make_uid(link, title),
-#                 "source": source_name,
-#                 "feed_url": feed_url,
-#                 "title": title,
-#                 "summary_raw": (entry.get("summary", entry.get("description", "")) or "").strip(),
-#                 "link": link,
-#                 "published": published,
-#                 "media_url": media_url or "",
-#                 "status": "NEW",  # local status, Firestore gets "raw"
-#             }
-#             rows.append(row)
-#     return rows
-
 
 def main():
     #rows = collect_rss()
